@@ -1,0 +1,106 @@
+#! /usr/bin/env ruby
+
+require "rubygems"
+require "bundler/setup"
+
+require "newrelic_plugin"
+require "json"
+
+# Monitors twemproxy by periodically retrieving data from twemproxy's stats port.
+module TwemproxyAgent
+  
+  class Agent < NewRelic::Plugin::Agent::Base
+
+    agent_guid "com.schoology.twemproxy"
+    agent_version "0.1.0"
+    agent_config_options :host
+    agent_human_labels("Twemproxy Agent") { "#{host}" }
+
+    def initialize(*args)
+      super(*args)
+      @previous_values = Hash.new
+    end
+
+    # Reports metrics on a periodic basis.
+    def poll_cycle
+
+      puts "---------------------"
+      puts "#{host}"
+      puts "---------------------"
+      data = twemproxy_data()
+
+      summary_ejections = 0
+      summary_client_connections = 0
+      summary_requests = 0
+      summary_server_connections = 0
+      summary_server_errors = 0
+      summary_in_queue = 0
+      summary_out_queue = 0
+      summary_servers = 0
+      data.keys.find_all{|k| data[k].is_a?(Hash)}.each do |pool|
+        summary_client_connections += metric_total("client connections/#{pool}", data[pool]['client_connections'], "connections")
+        summary_ejections += metric_total("server ejections/#{pool}", data[pool]['server_ejects'], "ejects")
+
+        data[pool].keys.find_all{|k| data[pool][k].is_a?(Hash)}.each do |server|
+          summary_servers += 1
+          summary_requests += metric_value("server requests/#{pool}/#{server}", data[pool][server]['requests'], "requests")
+          summary_server_connections += metric_total("server connections/#{pool}/#{server}",  data[pool][server]['server_connections'], "connections")
+          summary_server_errors += metric_value("server errors/#{pool}/#{server}", data[pool][server]['server_err'], "errors")
+          summary_in_queue += metric_total("in queue/#{pool}/#{server}", data[pool][server]['in_queue'], "ops")
+          summary_out_queue += metric_total("out queue/#{pool}/#{server}", data[pool][server]['out_queue'], "ops")
+          metric_value("request bytes/#{pool}/#{server}", data[pool][server]['request_bytes'], "bytes")
+          metric_value("response bytes/#{pool}/#{server}", data[pool][server]['response_bytes'], "bytes")
+        end
+      end
+
+      metric_total "total ejections", summary_ejections, "ejects"
+      metric_total "total client connections", summary_client_connections, "connections"
+      metric_total "total server requests", summary_requests, "requests"
+      metric_total "total server connections", summary_server_connections, "connections"
+      metric_total "total server errors", summary_server_errors, "errors"
+      metric_total "total in queue", summary_in_queue, "ops"
+      metric_total "total out queue", summary_out_queue, "ops"
+      metric_total "total servers", summary_servers, "servers"
+      metric_total "percent up", (((summary_servers - summary_ejections) / summary_servers) * 100.0), "%"
+    end
+
+    # Gets the stats data from twemproxy's stats port
+    def twemproxy_data
+      JSON.parse(`/usr/bin/nc #{host} 22222`)
+    end
+
+    # Reports the metric as the current value.
+    def metric_total(key, current_value, unit="")
+      report_metric key, unit, current_value
+      puts "#{key} = #{current_value}"
+
+      current_value
+    end
+
+    # Returns the delta between the current_vale and whatever the previous value may have been.
+    # If the previous value was not logged (e.g. the agent just started), then we return 0.
+    def metric_value(key, current_value, unit="")
+      value = current_value
+      if @previous_values.has_key?(key)
+        value = current_value - @previous_values[key]
+        @previous_values[key] = current_value
+      else
+        @previous_values[key] = current_value
+        value = 0
+      end
+
+      report_metric key, unit, value
+      puts "#{key} = #{value}"
+
+      value
+    end
+  end
+
+  NewRelic::Plugin::Setup.install_agent :twemproxy, TwemproxyAgent
+
+  #
+  # Launch the agent; this never returns.
+  #
+  NewRelic::Plugin::Run.setup_and_run
+
+end

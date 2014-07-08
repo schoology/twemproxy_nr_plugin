@@ -1,0 +1,17 @@
+# Please make sure to update the license_key information with the license key for your New Relic
+# account.
+#
+#
+newrelic:
+  #
+  # Update with your New Relic account license key:
+  #
+  license_key: 'YOUR_LICENSE_KEY_HERE'
+#
+# Agent Configuration:
+#
+agents:
+  # this is where configuration for agents belongs
+  twemproxy:
+    -
+      host: somehost.com
