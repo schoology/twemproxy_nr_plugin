@@ -4,6 +4,7 @@ require "rubygems"
 require "bundler/setup"
 
 require "newrelic_plugin"
+require "socket"
 require "json"
 
 # Monitors twemproxy by periodically retrieving data from twemproxy's stats port.
@@ -66,7 +67,8 @@ module TwemproxyAgent
 
     # Gets the stats data from twemproxy's stats port
     def twemproxy_data
-      JSON.parse(`/usr/bin/nc #{host} 22222`)
+      stats = TCPSocket.open(host, 22222)
+      JSON.parse(stats.gets)
     end
 
     # Reports the metric as the current value.
