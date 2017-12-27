@@ -14,7 +14,7 @@ module TwemproxyAgent
 
     agent_guid "com.schoology.twemproxy"
     agent_version "0.1.0"
-    agent_config_options :host
+    agent_config_options :host :port
     agent_human_labels("Twemproxy Agent") { "#{host}" }
 
     def initialize(*args)
@@ -67,7 +67,7 @@ module TwemproxyAgent
 
     # Gets the stats data from twemproxy's stats port
     def twemproxy_data
-      stats = TCPSocket.open(host, 22222)
+      stats = TCPSocket.open(host, port)
       JSON.parse(stats.gets)
     end
 
